@@ -1,119 +1,112 @@
-import streamlit as st
-import numpy as np
 import pandas as pd
-
-st.title('Streamlit 超入門 メモ')
-st.write('DataFrame')
-
-df=pd.DataFrame({
-    '1列目':[1,2,3,4],
-    '2列目':[10,20,30,40]
-})
-st.write('st.write(df)')
-st.write(df)
-
-st.write('st.dataframe(df.style.highlight_max(axis=0),width=300,height=800) #interactive')
-st.dataframe(df.style.highlight_max(axis=0),width=300,height=250)
-
-st.write('st.table(df.style.highlight_max(axis=0)) #static')
-st.table(df.style.highlight_max(axis=0))
-
-"""
-# 章
-## 節
-### 項
-```python
+import yfinance as yf
+import altair as alt
 import streamlit as st
-import numpy as np
-import pandas as pd
-```
-"""
+import math
 
-#Chart
+st.title('米国株価可視化アプリ')
 
-df1=pd.DataFrame(
-    np.random.rand(20,3),
-   columns=['a','b','c']
-)
+st.sidebar.write("""
+# GAFA株価
+こちらは株価可視化ツールです。以下のオプションから表示日数を指定してください。               
+""")
 
-st.dataframe(df1)
+st.sidebar.write("""
+## 表示日数選択
+""")
+days=st.sidebar.slider('日数',1,50,20)
 
-st.write('st.line_chart(df1)')
-st.line_chart(df1)
+#st.sidebar.write("""
+### 株価の範囲指定
+#""")
+#smin=0.0
+#smax=3500.0
+#ymin, ymax=st.sidebar.slider(
+#    '範囲を指定してください。',
+#    smin,smax,(smin,smax)
+#)
 
-st.write('st.area_chart(df1)')
-st.area_chart(df1)
+st.write(f"""
+### 過去 **{days}日間**のGAFA株価
+""")
+@st.cache_data
+def get_data(days, tickers):
+      df=pd.DataFrame()
+      for company in tickers.keys():
+          #get value
+          tkr = yf.Ticker(tickers[company]) #get ticker
 
-st.write('scatter_chart(df1)')
-st.scatter_chart(df1)
-
-st.write('bar_chart(df1)')
-st.bar_chart(df1)
-
-#map
-
-df3=pd.DataFrame(
-    np.random.rand(100,2)/[50,50]+[35.69,139.70],
-   columns=['lat','lon']
-)
-
-df3
-#st.dataframe(df3)
-st.write('st.map(df3)')
-st.map(df3)
-
-#image
-
-from PIL import Image
-
-st.write('Interactive Widgets')
-if st.checkbox('Show Image', value=True):
-
-    img=Image.open('myicom2.jpg')
-    st.image(img,caption='myicom',use_container_width=True)
-
-option=st.selectbox(
-    'Select Num',
-    list(range(1,11))
-)
-
-if st.checkbox('Show Num'):
-    st.write('Num:',option)
-
-text_line=st.text_input('Free Space')
-if text_line=="":
-    pass
-else:
-    st.write(text_line)
+          hist = tkr.history(period=f'{days}d') 
 
 
-condition=st.slider('Slider',0,100,50)
-st.write(condition)
+          hist.index = hist.index.strftime('%d %B %Y') #format
+          hist=hist[['Close']]
+          hist.columns = [company]
 
-left_column,mid_column,right_column=st.columns(3)
+          hist = hist.T #pivot
+          hist.index.name='Name' #rename
 
-button1=left_column.button('右カラムに文字を表示')
-button2=mid_column.button('表示を消す')
-if button1:
-    right_column.write('True')
-    if button2:
-        right_column.write('')
-expander_sample=st.expander('Q1')
-expander_sample.write('Ans1')
+          df = pd.concat([df,hist]) #add to pandas dataframe
+      return df
+try:
 
-#Progress bar
 
-import time
+    tickers={
+        'apple':'AAPL',
+        'meta':'META',
+        'microsoft':'MSFT',
+        'google':'GOOGL',
+        'netflix':'NFLX',
+        'amazon':'AMZN',
+        'tesla':'TSLA'
+    }
 
-st.write('Progress bar')
-'Start!'
+    df=get_data(days,tickers)
 
-latest_iteration=st.empty()
-bar=st.progress(0)
 
-for i in range(100):
-    latest_iteration.text(f'Iteration{i+1}')
-    bar.progress(i+1)
-    time.sleep(0.1)
-'Done!'
 
+    companies=st.multiselect(
+        '会社名を選択してください',
+        list(df.index),
+        ['google','amazon','meta','apple']
+    )
+
+    if not companies:
+        st.error('少なくとも１社は選んでください。')
+    else:
+        data = df.loc[companies]
+        st.write('### 株価 (USD)',data.sort_index())
+        data=data.T.reset_index()
+        data=pd.melt(data, id_vars=['Date']).rename(
+            columns={'value':'Stock Prices(USD)'}
+        )
+        smax=data['Stock Prices(USD)'].max()
+        smax=math.ceil(smax/100) * 100
+
+        smin=data['Stock Prices(USD)'].min()
+        smin=math.floor(smin/100) * 100
+
+        st.sidebar.write("""
+        ## 株価の範囲指定
+        """)
+        
+        ymin, ymax=st.sidebar.slider(
+            '範囲を指定してください。',
+            smin,smax,(smin,smax)
+        )
+
+
+        chart=(
+            alt.Chart(data)
+            .mark_line(opacity=0.8, clip=True) #Trim 
+            .encode(
+                x="Date:T",
+                y=alt.Y("Stock Prices(USD):Q", stack=None, scale=alt.Scale(domain=[ymin,ymax])),
+                color="Name:N"
+            )
+        )
+        st.altair_chart(chart, use_container_width=True)
+except:
+    st.error(
+        "おっと！なにか問題が起きているようです。"
+    )
