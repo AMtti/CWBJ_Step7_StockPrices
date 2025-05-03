@@ -4,7 +4,6 @@ import altair as alt
 import streamlit as st
 import math
 
-
 st.title('米国株価可視化アプリ')
 
 st.sidebar.write("""
