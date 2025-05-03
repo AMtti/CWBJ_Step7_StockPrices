@@ -108,5 +108,5 @@ try:
         st.altair_chart(chart, use_container_width=True)
 except:
     st.error(
-        "おっと！なにか問題が起きているようです。"
+        "おっと！なにか問題が起きているようです!!(main)"
     )
